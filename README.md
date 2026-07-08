@@ -1,5 +1,9 @@
 # Docling Local RAG - Layout-Aware Document Q&A
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b166ea86-c521-4dec-91b4-30b2523600f8" alt="App Dashboard Preview" width="100%" />
+</p>
+
 A fully local, privacy-first Retrieval-Augmented Generation (RAG) system powered by **IBM's Docling** for advanced, layout-aware document parsing, **ChromaDB** for vector storage, and **Ollama** for local LLM inference.
 
 This repository demonstrates how to build a high-fidelity document assistant that doesn't just read plain text, but understands document hierarchy, parses complex tables, and extracts diagrams/figures to display them directly alongside grounding references in chat.
