@@ -6,7 +6,7 @@ This repository demonstrates how to build a high-fidelity document assistant tha
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 * **Layout-Aware Parsing (IBM Docling)**: Converts PDFs to structural markdown, preserving document hierarchy (headings, sections), reading order, and complex tables (serialized to Markdown tables).
 * **Figure & Image Grounding**: Automatically extracts pictures and diagrams from documents and matches them to retrieved sections during queries.
@@ -18,7 +18,7 @@ This repository demonstrates how to build a high-fidelity document assistant tha
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 * **Parser**: [IBM Docling](https://github.com/DS4SD/docling)
 * **LLM & Embeddings**: [Ollama](https://ollama.com/) (Qwen 2.5 & Nomic Embed)
@@ -28,7 +28,7 @@ This repository demonstrates how to build a high-fidelity document assistant tha
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 ├── app.py                      # Streamlit entrypoint: Technical Reference Chat UI
@@ -45,7 +45,7 @@ This repository demonstrates how to build a high-fidelity document assistant tha
 
 ---
 
-## 🚀 Quick Start (Local Run)
+## Quick Start (Local Run)
 
 ### Prerequisites
 * Python 3.11 installed.
@@ -73,22 +73,63 @@ This repository demonstrates how to build a high-fidelity document assistant tha
 
 ---
 
-## 🐳 Quick Start (Docker Run)
+## Quick Start (Docker Run)
 
-To run the application using Docker:
+You can run the application containerized in two ways: pulling the pre-built image from Docker Hub (quickest) or building it locally.
 
-1. Build and launch the containers:
-   ```bash
-   docker-compose up --build -d
-   ```
-2. Open your browser and navigate to `http://localhost:8501`.
-3. The application will automatically check for and download the required Ollama models in the sidebar background.
+### Option A: Pull Pre-built Image from Docker Hub (Zero Setup)
+You do not need to download the source repository. Simply save the following config as `docker-compose.yml` in an empty folder:
 
-*To enable NVIDIA GPU acceleration for Ollama, refer to the GPU setup instructions in the `docker-compose.yml` file.*
+```yaml
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    restart: unless-stopped
+
+  web:
+    image: strangehumaan/cn-rag-web:latest
+    container_name: siemens-rag-web
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./manual:/app/manual
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - CHROMA_DB_PATH=/app/chroma_db
+      - DEFAULT_MANUAL_PATH=/app/manual/AS410-5H_System_Manuals7400_cpu_410_proc_autom_smart_system_system_en-US_en-US.pdf
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_storage:
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
+### Option B: Build Locally from Source
+If you have cloned the repository, you can build the image locally and start the services:
+```bash
+docker-compose up --build -d
+```
+
+Once running, navigate to `http://localhost:8501` in your browser. The application will automatically check for and download the required Ollama models in the sidebar background.
+
+*To enable NVIDIA GPU acceleration for Ollama, uncomment the `deploy` block under the `ollama` service in `docker-compose.yml`.*
 
 ---
 
-## 💡 How it Works (Under the Hood)
+## How it Works (Under the Hood)
 
 ### 1. Document Parsing & Image Extraction
 When a PDF is uploaded, **Docling** parses the document structure. It extracts text sections, markdown tables, and crops out figures/drawings. The coordinates of these elements are stored, and pictures are saved to the `extracted_images/` folder.
