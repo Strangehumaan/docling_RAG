@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Project Databases and Documents (Heavy / Client-specific)
+chroma_db/
+extracted_images/
+manual/
+temp_uploads/
+
+# IDE / Editor configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Docker save artifacts
+*.tar
+*.tar.gz
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Antigravity agent configuration folders
+.agents/

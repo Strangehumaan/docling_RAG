@@ -1,0 +1,5 @@
+streamlit
+chromadb
+ollama
+docling
+opencv-python-headless

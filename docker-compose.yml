@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    restart: unless-stopped
+    # Optional: If the client host has NVIDIA GPUs, they can uncomment the deploy block below
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  web:
+    image: strangehumaan/cn-rag-web:latest
+    container_name: siemens-rag-web
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./manual:/app/manual
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - CHROMA_DB_PATH=/app/chroma_db
+      - DEFAULT_MANUAL_PATH=/app/manual/AS410-5H_System_Manuals7400_cpu_410_proc_autom_smart_system_system_en-US_en-US.pdf
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_storage:
