@@ -25,6 +25,8 @@ services:
       - "8501:8501"
     volumes:
       - ./manual:/app/manual
+    env_file:
+      - .env
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - CHROMA_DB_PATH=/app/chroma_db

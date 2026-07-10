@@ -4,6 +4,12 @@ import chromadb
 import ollama
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+import streamlit as st
+
+# Load configuration from .env file
+load_dotenv()
+
 from docling_core.transforms.chunker.hierarchical_chunker import (
     ChunkingDocSerializer,
     ChunkingSerializerProvider,
@@ -20,6 +26,8 @@ class MDTableSerializerProvider(ChunkingSerializerProvider):
 # Load configuration from environment
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH", "chroma_db")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 def get_ollama_client():
     """Initialize and return the Ollama API client."""
@@ -65,7 +73,7 @@ def ensure_models_pulled(models=["qwen2.5:7b-instruct", "nomic-embed-text"]):
             for progress in client.pull(model=model, stream=True):
                 yield model, progress
 
-def split_text_with_overlap(text, max_chars=1500, overlap=200):
+def split_text_with_overlap(text, max_chars=1500, overlap=250):
     """
     Split text into overlapping chunks of max_chars length, trying to split
     on natural word/sentence boundaries.
@@ -221,7 +229,6 @@ def parse_and_chunk_pdf(file_path, page_range=None):
         text = dc.text.strip()
         if not text:
             continue
-
         if current_chunk is None:
             current_chunk = {
                 "text": text,
@@ -340,18 +347,142 @@ def ingest_pdf_to_chroma(file_path, collection_name="siemens_manuals", page_rang
     if progress_callback:
         progress_callback(1.0, f"Successfully indexed all {total} chunks!")
 
+    # Invalidate document list cache
+    try:
+        list_ingested_documents.clear()
+    except Exception:
+        pass
+
     return len(chunks)
 
-def query_rag(query, collection_name="siemens_manuals", n_results=5):
+def generate_llm_response(model_name, system_prompt, user_prompt, chat_history=None):
     """
-    Perform semantic search over ChromaDB and synthesize response using local qwen2.5:7b-instruct.
+    Generate response from the selected LLM.
+    If chat_history is provided, it passes the full conversation context to the LLM (for generation).
     """
+    messages = []
+    
+    # If chat_history is provided, convert and append it (excluding sources to keep payload clean)
+    if chat_history:
+        for msg in chat_history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+            
+    # Append the current prompt
+    if model_name == "ChatGPT (GPT-4o)":
+        if not OPENAI_API_KEY:
+            raise ValueError(
+                "OpenAI API Key is missing. Please configure OPENAI_API_KEY in your .env file."
+            )
+        from openai import OpenAI
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        
+        api_messages = []
+        if system_prompt:
+            api_messages.append({"role": "system", "content": system_prompt})
+        api_messages.extend(messages)
+        api_messages.append({"role": "user", "content": user_prompt})
+        
+        chat_response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=api_messages
+        )
+        return chat_response.choices[0].message.content
+
+    elif model_name == "Claude (Claude 3.5 Sonnet)":
+        if not ANTHROPIC_API_KEY:
+            raise ValueError(
+                "Anthropic API Key is missing. Please configure ANTHROPIC_API_KEY in your .env file."
+            )
+        from anthropic import Anthropic
+        anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        
+        api_messages = list(messages)
+        api_messages.append({"role": "user", "content": user_prompt})
+        
+        chat_response = anthropic_client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=4096,
+            system=system_prompt if system_prompt else "",
+            messages=api_messages
+        )
+        return chat_response.content[0].text
+
+    else:
+        # Default / Fallback to local Ollama (Qwen 2.5)
+        client = get_ollama_client()
+        
+        api_messages = []
+        if system_prompt:
+            api_messages.append({"role": "system", "content": system_prompt})
+        api_messages.extend(messages)
+        api_messages.append({"role": "user", "content": user_prompt})
+        
+        chat_response = client.chat(
+            model="qwen2.5:7b-instruct",
+            messages=api_messages
+        )
+        return chat_response["message"]["content"]
+
+
+def reformulate_query(query, model_name, chat_history):
+    """
+    Given the latest user question and the conversation history, reformulate it into
+    a standalone search query.
+    """
+    if not chat_history or len(chat_history) == 0:
+        return query
+        
+    history_str = ""
+    # Use last 5 turns to keep context brief but sufficient
+    for msg in chat_history[-5:]:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        history_str += f"{role}: {msg['content']}\n"
+        
+    system_prompt = (
+        "You are a helpful assistant that reformulates follow-up questions into standalone search queries."
+    )
+    user_prompt = (
+        "Given the following conversation history and a follow-up question, "
+        "rephrase the follow-up question to be a standalone question (in English) that "
+        "contains all necessary context (e.g. specific product names like CPU 410-5H) "
+        "so it can be used for search in a vector database.\n"
+        "Do NOT answer the question. Just return the rephrased standalone question and nothing else. "
+        "If the question is already fully standalone and does not reference any pronouns or implicit context from the history, "
+        "return it exactly as-is.\n\n"
+        f"Conversation History:\n{history_str}\n"
+        f"Follow-up Question: {query}\n"
+        "Standalone Question:"
+    )
+    try:
+        standalone = generate_llm_response(model_name, system_prompt, user_prompt)
+        standalone = standalone.strip().strip('"').strip("'")
+        return standalone
+    except Exception as e:
+        print(f"Error reformulating query: {e}")
+        return query
+
+
+def query_rag(query, model_name="Ollama (Qwen 2.5)", collection_name="siemens_manuals", n_results=5, chat_history=None):
+    """
+    Perform semantic search over ChromaDB and synthesize response using the selected model with chat history context.
+    """
+    # 1. Clean history to get only past turns (exclude the current user turn if already added)
+    history_turns = []
+    if chat_history:
+        if chat_history[-1]["role"] == "user" and chat_history[-1]["content"] == query:
+            history_turns = chat_history[:-1]
+        else:
+            history_turns = chat_history
+
+    # 2. Reformulate query to be standalone (for high precision ChromaDB retrieval)
+    standalone_query = reformulate_query(query, model_name, history_turns)
+
     chroma_client = get_chroma_client()
     collection = chroma_client.get_or_create_collection(name=collection_name)
     ollama_client = get_ollama_client()
 
-    # Get local embedding for query with task prefix
-    response = ollama_client.embeddings(model="nomic-embed-text", prompt="search_query: " + query)
+    # Get local embedding for standalone query with task prefix
+    response = ollama_client.embeddings(model="nomic-embed-text", prompt="search_query: " + standalone_query)
     query_embedding = response["embedding"]
 
     # Perform ChromaDB search
@@ -400,18 +531,17 @@ def query_rag(query, collection_name="siemens_manuals", n_results=5):
 
     user_prompt = f"Siemens Manual Context:\n{context_str}\n\nUser Question:\n{query}"
 
-    # Generate answer using local Qwen2.5 model
-    chat_response = ollama_client.chat(
-        model="qwen2.5:7b-instruct",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+    # Generate answer using selected LLM (passing past conversation history)
+    answer = generate_llm_response(
+        model_name=model_name,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        chat_history=history_turns
     )
 
-    answer = chat_response["message"]["content"]
     return answer, retrieved_chunks
 
+@st.cache_data
 def list_ingested_documents(collection_name="siemens_manuals"):
     """List all unique document names currently in the vector store."""
     chroma_client = get_chroma_client()
@@ -431,6 +561,13 @@ def delete_document(document_name, collection_name="siemens_manuals"):
     chroma_client = get_chroma_client()
     collection = chroma_client.get_or_create_collection(name=collection_name)
     collection.delete(where={"source": document_name})
+    
+    # Invalidate document list cache
+    try:
+        list_ingested_documents.clear()
+    except Exception:
+        pass
+        
     return True
 
 

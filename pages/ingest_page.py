@@ -134,6 +134,11 @@ with col2:
                         client.delete_collection("siemens_manuals")
                     except Exception:
                         pass
+                    # Clear document list cache
+                    try:
+                        rag_core.list_ingested_documents.clear()
+                    except Exception:
+                        pass
                     st.success("Vector database successfully wiped.")
                     st.rerun()
     except Exception as e:

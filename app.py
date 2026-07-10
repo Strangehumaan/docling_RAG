@@ -19,6 +19,21 @@ st.markdown("""
 
 sidebar.render_sidebar()
 
+# Initialize session state for selected model
+if "selected_model" not in st.session_state:
+    st.session_state["selected_model"] = "Ollama (Qwen 2.5)"
+
+# Add LLM dropdown to sidebar
+st.sidebar.subheader("LLM Configuration")
+selected_model = st.sidebar.selectbox(
+    "Choose LLM Model:",
+    options=["Ollama (Qwen 2.5)", "ChatGPT (GPT-4o)", "Claude (Claude 3.5 Sonnet)"],
+    index=["Ollama (Qwen 2.5)", "ChatGPT (GPT-4o)", "Claude (Claude 3.5 Sonnet)"].index(st.session_state["selected_model"])
+)
+if selected_model != st.session_state["selected_model"]:
+    st.session_state["selected_model"] = selected_model
+    st.rerun()
+
 
 # with st.sidebar:
 #     st.image("materials/cnautomation-logo.jpg", use_container_width=True)
@@ -30,7 +45,7 @@ sidebar.render_sidebar()
 #         st.switch_page("pages/ingest_page.py")
 st.title("Technical Reference Chat")
 st.markdown(
-    "Query your local manuals library. Responses are grounded in retrieved context using local **Qwen2.5:7b-instruct**."
+    f"Query your local manuals library. Responses are grounded in retrieved context using **{st.session_state['selected_model']}**."
 )
 
 # 1. Database Check
@@ -99,7 +114,12 @@ else:
                     # Execute query
                     # Note: We can filter sources by selected target_docs if needed,
                     # but simple query_rag will query the collection.
-                    answer, sources = rag_core.query_rag(prompt, n_results=num_sources)
+                    answer, sources = rag_core.query_rag(
+                        prompt, 
+                        model_name=st.session_state["selected_model"], 
+                        n_results=num_sources,
+                        chat_history=st.session_state.messages
+                    )
                     
                     # Filter sources if user selected a subset of docs
                     if target_docs:
@@ -133,4 +153,7 @@ else:
                     })
                 except Exception as e:
                     st.error(f"Error executing RAG pipeline: {str(e)}")
-                    st.info("Ensure Ollama is running and the models are fully downloaded.")
+                    if st.session_state.get("selected_model") == "Ollama (Qwen 2.5)":
+                        st.info("Ensure Ollama is running and the models are fully downloaded.")
+                    else:
+                        st.info("Ensure Ollama is running (for embeddings) and your API keys are correctly set in the .env file.")

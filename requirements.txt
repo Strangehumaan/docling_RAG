@@ -3,3 +3,6 @@ chromadb
 ollama
 docling
 opencv-python-headless
+python-dotenv
+openai
+anthropic

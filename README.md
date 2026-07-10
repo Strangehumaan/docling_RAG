@@ -4,6 +4,10 @@ A fully local, privacy-first Retrieval-Augmented Generation (RAG) system powered
 
 This repository demonstrates how to build a high-fidelity document assistant that doesn't just read plain text, but understands document hierarchy, parses complex tables, and extracts diagrams/figures to display them directly alongside grounding references in chat.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b166ea86-c521-4dec-91b4-30b2523600f8" alt="App Dashboard Preview" width="100%" />
+</p>
+
 ---
 
 ## Key Features
