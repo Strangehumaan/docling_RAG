@@ -541,6 +541,34 @@ def query_rag(query, model_name="Ollama (Qwen 2.5)", collection_name="siemens_ma
 
     return answer, retrieved_chunks
 
+def sanitize_collection_name(name):
+    """Sanitize collection name to conform to ChromaDB naming rules."""
+    import re
+    # Convert to lowercase and trim spaces
+    name = name.lower().strip()
+    # Replace spaces with underscores
+    name = name.replace(" ", "_")
+    # Remove any characters that are not alphanumeric, underscore, dot, or hyphen
+    name = re.sub(r'[^a-z0-9._-]', '', name)
+    # Remove consecutive dots
+    name = re.sub(r'\.+', '.', name)
+    # Ensure it starts with alphanumeric
+    name = re.sub(r'^[^a-z0-9]+', '', name)
+    # Ensure it ends with alphanumeric
+    name = re.sub(r'[^a-z0-9]+$', '', name)
+    # Ensure it is at least 3 characters
+    if len(name) < 3:
+        name = (name + "col")[:3]
+    # Ensure it is at most 63 characters
+    return name[:63]
+
+def list_collections():
+    """List all collection names in ChromaDB."""
+    chroma_client = get_chroma_client()
+    collections = chroma_client.list_collections()
+    return sorted([c.name for c in collections])
+
+
 @st.cache_data
 def list_ingested_documents(collection_name="siemens_manuals"):
     """List all unique document names currently in the vector store."""
